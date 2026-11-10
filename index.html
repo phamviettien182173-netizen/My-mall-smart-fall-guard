@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>Smart Fall Guard Dashboard</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; background: #121212; color: white; margin: 0; padding: 20px; transition: background 0.3s; }
+    .card { background: #1e1e1e; padding: 20px; border-radius: 12px; margin: 20px auto; max-width: 800px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
+    .alarm-active { background: #b71c1c !important; animation: blink 1s infinite; }
+    @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.7; } 100% { opacity: 1; } }
+    button { padding: 12px 24px; background: #4caf50; color: white; border: none; border-radius: 6px; font-size: 16px; cursor: pointer; }
+  </style>
+</head>
+<body>
+
+  <h1>🛡️ Hệ Thống Giám Sát Té Ngã Vòng Đeo Tay</h1>
+  <div id="status-badge" style="color: #ff9800;">Trạng thái thiết bị: Đang chờ...</div>
+
+  <div class="card">
+    <h2>Biểu Đồ Gia Tốc Theo Thời Gian Thực (SVM)</h2>
+    <canvas id="telemetryChart" height="100"></canvas>
+  </div>
+
+  <div id="alarm-box" class="card" style="display: none;">
+    <h1 style="color: #ffeb3b;">⚠️ PHÁT HIỆN TÉ NGÃ KHẨN CẤP!</h1>
+    <p id="alarm-details"></p>
+    <button onclick="dismissAlarm()">ĐÃ XỬ LÝ (TẮT BÁO ĐỘNG)</button>
+  </div>
+
+  <script>
+    const socket = io();
+    const ctx = document.getElementById('telemetryChart').getContext('2d');
+    
+    // Biểu đồ Chart.js
+    const chart = new Chart(ctx, {
+      type: 'line',
+      data: { labels: [], datasets: [{ label: 'Vector Gia Tốc (SVM)', data: [], borderColor: '#00e676', tension: 0.2 }] },
+      options: { scales: { y: { min: 0, max: 4 } } }
+    });
+
+    // 1. Nhận dữ liệu đồ thị telemetry
+    socket.on('telemetry_data', (data) => {
+      const now = new Date().toLocaleTimeString();
+      if (chart.data.labels.length > 20) {
+        chart.data.labels.shift();
+        chart.data.datasets[0].data.shift();
+      }
+      chart.data.labels.push(now);
+      chart.data.datasets[0].data.push(data.svm);
+      chart.update();
+    });
+
+    // 2. Bắt trạng thái Online/Offline
+    socket.on('device_status', (status) => {
+      document.getElementById('status-badge').innerText = "Trạng thái thiết bị: " + status;
+      document.getElementById('status-badge').style.color = status === 'ONLINE' ? '#00e676' : '#f44336';
+    });
+
+    // 3. Nhận Cảnh báo ngã nổ còi & đổi màu màn hình
+    socket.on('emergency_alert', (data) => {
+      document.body.classList.add('alarm-active');
+      document.getElementById('alarm-box').style.display = 'block';
+      document.getElementById('alarm-details').innerText = `Thiết bị ${data.device_id} vừa bị ngã! Lực va chạm: ${data.svm_peak}g`;
+    });
+
+    function dismissAlarm() {
+      document.body.classList.remove('alarm-active');
+      document.getElementById('alarm-box').style.display = 'none';
+    }
+  </script>
+</body>
+</html>
